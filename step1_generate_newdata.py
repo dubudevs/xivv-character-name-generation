@@ -7,7 +7,7 @@ import soundfile as sf
 SOURCE_DIR = "N:/XIV_Voices/Data"  # Original folder
 NEW_DATA_DIR = "data/OrigData"  # Destination for filtered JSONs & converted WAVs
 ORIGINAL_OGG_DIR = "data/OriginalOggs"  # Backup folder for original .ogg files
-FILTER_PATTERN = re.compile(r"Arc[^a-z]|_NAME_")
+FILTER_PATTERN = re.compile(r"Arc[^a-z]|_NAME_|_FIRSTNAME_")
 
 def copy_and_convert_files():
     total_files = 0

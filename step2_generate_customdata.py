@@ -10,23 +10,23 @@ SPECIFIED_NAME = "v'zicksa"  # Set the replacement name here
 NEW_DATA_DIR = "data/OrigData"         # Source folder from Step 1
 CUSTOM_DATA_DIR = "data/CustomData"   # Step 2 output folder
 # Regex pattern to detect relevant lines
-FILTER_PATTERN = re.compile(r"Arc(?=[^a-z])|_NAME_")
+FILTER_PATTERN = re.compile(r"Arc(?=[^a-z])|_NAME_|_FIRSTNAME_")
 # Initialize TTS API
 f5tts = F5TTS()
 
 def get_ellipsis_suffix(text_length):
     if text_length < 10:
-        return " ... ... ... ... ..."
+        return " ... ..."
     elif text_length < 20:
-        return " ... ... ... ..."
+        return " ... ..."
     elif text_length < 40:
-        return " ... ... ..."
-    elif text_length < 60:
         return " ..."
+    elif text_length < 60:
+        return ""
     else:
         return ""
 
-def find_suitable_wav(original_wav_path, min_size_kb=250):
+def find_suitable_wav(original_wav_path, min_size_kb=350):
     """Find a suitable WAV file in the same folder:
     - If original is smaller than 150KB, find one over 250KB
     - If no file over 250KB exists, use the largest one in the folder
@@ -36,7 +36,7 @@ def find_suitable_wav(original_wav_path, min_size_kb=250):
     print(f"Original file: {os.path.basename(original_wav_path)} is {original_size_kb:.2f}KB")
     
     # If original file is already big enough, use it
-    if original_size_kb >= 150:
+    if original_size_kb >= 250:
         print(f"Using original file as it's larger than 150KB")
         return original_wav_path
     
@@ -91,8 +91,22 @@ def process_jsons_and_generate():
                 # Remove punctuation from the start of gen_text
                 gen_text = re.sub(r'^[^\w\s]+', '', gen_text.strip())
                
+                text_len = len(gen_text.strip())
+
+                if text_len < 10:
+                    speedv = 0.4
+                elif text_len < 20:
+                    speedv = 0.5
+                elif text_len < 40:
+                    speedv = 0.7
+                elif text_len < 60:
+                    speedv = 0.8
+                else:
+                    speedv = 0.9
+
                 # Add appropriate ellipsis
                 gen_text += get_ellipsis_suffix(len(gen_text.strip()))
+                gen_text = gen_text.replace("!", ".")
                
                 # Compute paths
                 rel_path = os.path.relpath(root, NEW_DATA_DIR)
@@ -110,14 +124,15 @@ def process_jsons_and_generate():
                 os.makedirs(os.path.dirname(new_wav_path), exist_ok=True)
                
                 # Call API
-                print(f"Generating speech for: {file}")
+                print(f"🔊 Generating speech for: {file}")
                 wav, sr, spec = f5tts.infer(
                     ref_file=ref_wav_path,
                     ref_text="",
                     gen_text=gen_text,
                     file_wave=new_wav_path,
                     seed=None,
-                    nfe_step=32,
+                    nfe_step=64,
+                    speed=speedv,
                 )
                
                 # Copy JSON file to CustomData
@@ -125,13 +140,13 @@ def process_jsons_and_generate():
                 os.makedirs(os.path.dirname(new_json_path), exist_ok=True)
                 shutil.copy2(json_path, new_json_path)
                 processed_files += 1
-                print(f"Processed {file} - New WAV saved to {new_wav_path}")
+                print(f"✅ Processed {file} - New WAV saved to {new_wav_path}")
    
     print(f"Finished Step 2: {processed_files} files processed.")
 
 # === RUN SCRIPT ===
 if __name__ == "__main__":
-    print(f"Starting Step 2: Generating new audio via API (Replacing *NAME* with '{SPECIFIED_NAME}')...")
+    print(f"🚀 Starting Step 2: Generating new audio via API (Replacing *NAME* with '{SPECIFIED_NAME}')...")
     os.makedirs(CUSTOM_DATA_DIR, exist_ok=True)  # Ensure base folder exists
     process_jsons_and_generate()
     print("CustomData is ready. Run step3_convert_wav_to_ogg.py next!")
