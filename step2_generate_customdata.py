@@ -1,6 +1,5 @@
 import os
 import json
-import shutil
 import re
 import random
 from f5_tts.api import F5TTS
@@ -16,9 +15,9 @@ f5tts = F5TTS()
 
 def get_ellipsis_suffix(text_length):
     if text_length < 10:
-        return " ... ..."
+        return " ..."
     elif text_length < 20:
-        return " ... ..."
+        return " ..."
     elif text_length < 40:
         return " ..."
     elif text_length < 60:
@@ -72,6 +71,7 @@ def find_suitable_wav(original_wav_path, min_size_kb=350):
 
 def process_jsons_and_generate():
     processed_files = 0
+    skipped_files = 0
     for root, _, files in os.walk(NEW_DATA_DIR):
         for file in files:
             if file.endswith(".json"):
@@ -81,16 +81,20 @@ def process_jsons_and_generate():
                 sentence = contents.get("sentence", "")
                 if not FILTER_PATTERN.search(sentence):
                     continue  # Skip if pattern not matched
-               
-                gen_text = FILTER_PATTERN.sub(SPECIFIED_NAME, sentence)
+                
+                # Goodbye, Warrior of Our Friend
+                sentence = re.sub(r"\bWarrior of\s+(?:_NAME_|_FIRSTNAME_|Arc)(?=[^a-zA-Z]|$)", "Warrior of Light", sentence)
 
-                # Remove final period if present
+                # Remove comma and space before the matched pattern (to avoid awkward pauses)
+                cleaned_sentence = re.sub(r",\s+(?=" + FILTER_PATTERN.pattern + r")", " ", sentence)
+
+                # Replace the filtered pattern with the specified name
+                gen_text = FILTER_PATTERN.sub(SPECIFIED_NAME, cleaned_sentence)
+
                 if gen_text.endswith("."):
                     gen_text = gen_text.strip()[:-1]
-               
-                # Remove punctuation from the start of gen_text
                 gen_text = re.sub(r'^[^\w\s]+', '', gen_text.strip())
-               
+
                 text_len = len(gen_text.strip())
 
                 if text_len < 10:
@@ -98,51 +102,75 @@ def process_jsons_and_generate():
                 elif text_len < 20:
                     speedv = 0.5
                 elif text_len < 40:
-                    speedv = 0.7
+                    speedv = 0.6
                 elif text_len < 60:
                     speedv = 0.8
                 else:
                     speedv = 0.9
 
-                # Add appropriate ellipsis
                 gen_text += get_ellipsis_suffix(len(gen_text.strip()))
                 gen_text = gen_text.replace("!", ".")
-               
-                # Compute paths
+
                 rel_path = os.path.relpath(root, NEW_DATA_DIR)
                 ref_wav_path_original = os.path.join(root, file.replace(".json", ".wav"))
                 new_wav_path = os.path.join(CUSTOM_DATA_DIR, rel_path, file.replace(".json", ".wav"))
-                
-                # Check file size and find suitable reference WAV if needed
+
+                # Skip generation if file already exists
+                if os.path.exists(new_wav_path):
+                    print(f"Skipping {file} - Output WAV already exists.")
+                    skipped_files += 1
+                    continue
+
                 ref_wav_path = find_suitable_wav(ref_wav_path_original, 250)
-                
-                # Report if we're using a different file
+
                 if ref_wav_path != ref_wav_path_original:
                     print(f"Using alternative reference WAV: {os.path.basename(ref_wav_path)}")
-               
-                # Ensure folder exists
+
                 os.makedirs(os.path.dirname(new_wav_path), exist_ok=True)
-               
-                # Call API
-                print(f"🔊 Generating speech for: {file}")
+
+                print(f"Generating speech for: {file}")
                 wav, sr, spec = f5tts.infer(
                     ref_file=ref_wav_path,
                     ref_text="",
                     gen_text=gen_text,
                     file_wave=new_wav_path,
                     seed=None,
-                    nfe_step=64,
+                    nfe_step=32,
                     speed=speedv,
                 )
-               
-                # Copy JSON file to CustomData
+
                 new_json_path = os.path.join(CUSTOM_DATA_DIR, rel_path, file)
                 os.makedirs(os.path.dirname(new_json_path), exist_ok=True)
-                shutil.copy2(json_path, new_json_path)
+                # Load original JSON again to append metadata
+                with open(json_path, "r", encoding="utf-8") as f:
+                    original_data = json.load(f)
+
+                # Add generation parameters
+                original_data["generation_parameters"] = {
+                    "ref_file": ref_wav_path,
+                    "ref_text": "",
+                    "gen_text": gen_text,
+                    "file_wave": new_wav_path,
+                    "seed": None,
+                    "nfe_step": 32,
+                    "speed": speedv,
+                }
+
+                # Add reference WAV path if it's not the original
+                if ref_wav_path != ref_wav_path_original:
+                    original_data["reference_wav_used"] = ref_wav_path
+
+                # Save updated JSON to CustomData
+                new_json_path = os.path.join(CUSTOM_DATA_DIR, rel_path, file)
+                os.makedirs(os.path.dirname(new_json_path), exist_ok=True)
+                with open(new_json_path, "w", encoding="utf-8") as f:
+                    json.dump(original_data, f, ensure_ascii=False, indent=2)
+
                 processed_files += 1
-                print(f"✅ Processed {file} - New WAV saved to {new_wav_path}")
-   
-    print(f"Finished Step 2: {processed_files} files processed.")
+                print(f"Processed {file} - New WAV saved to {new_wav_path}")
+
+    print(f"Finished Step 2: {processed_files} files processed, {skipped_files} skipped (already exist).")
+
 
 # === RUN SCRIPT ===
 if __name__ == "__main__":
