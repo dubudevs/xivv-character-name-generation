@@ -6,7 +6,7 @@ import logging
 import subprocess
 
 # === CONFIGURATION ===
-CUSTOM_DATA_DIR = "data/CustomData-nolex"
+CUSTOM_DATA_DIR = "data/CustomData"
 CONVERTED_DATA_DIR = "data/FinalOggData"
 MAX_PATH_LENGTH = 260
 LOG_FILE = "conversion_errors.log"
@@ -49,7 +49,7 @@ def convert_wav_to_ogg(wav_path, ogg_path):
         try:
             # Run ffmpeg with appropriate parameters
             result = subprocess.run(
-                ['ffmpeg', '-i', wav_path, '-c:a', 'libvorbis', '-q:a', '4', ogg_path],
+                ['ffmpeg', '-i', wav_path, '-c:a', 'libopus', '-b:a', '64k', ogg_path],
                 check=True,
                 capture_output=True,
                 text=True
